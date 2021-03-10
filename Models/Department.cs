@@ -1,4 +1,5 @@
 ﻿using BasicWebApi.Data;
+using Microsoft.AspNetCore.Authorization;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -7,6 +8,7 @@ using System.Threading.Tasks;
 
 namespace BasicWebApi.Models
 {
+    [Authorize]
     public class Department
     {
 

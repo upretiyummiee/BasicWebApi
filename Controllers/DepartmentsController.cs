@@ -8,11 +8,13 @@ using Microsoft.EntityFrameworkCore;
 using BasicWebApi.Data;
 using BasicWebApi.Models;
 using Microsoft.AspNetCore.Cors;
+using Microsoft.AspNetCore.Authorization;
 
 namespace BasicWebApi.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize(Roles ="Admin")]
     public class DepartmentsController : ControllerBase
     {
         private readonly AppDbContext _context;
