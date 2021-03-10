@@ -2,6 +2,7 @@ using AutoMapper;
 using BasicWebApi.Data;
 using BasicWebApi.Data.IdentityData;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -11,10 +12,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.IdentityModel.Tokens;
 using Newtonsoft.Json;
 using System;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace BasicWebApi
@@ -31,6 +34,10 @@ namespace BasicWebApi
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            string key = "401b09eab3c013d4ca54922bb802bec8fd5318192b" +
+                "0a75f201d8b3727429090fb337591abd3e44453b954555b7a0812e1" +
+                "081c39b740293f765eae731f5a65ed1";
+
             services.AddControllers();
 
             services.AddCors(options =>
@@ -71,10 +78,23 @@ namespace BasicWebApi
                 o.SignIn.RequireConfirmedPhoneNumber = false;
             }).AddEntityFrameworkStores<AppDbContext>().AddDefaultTokenProviders();
 
-            services.AddAuthentication(defaultScheme:"JWTBearerAuthentication")
-                .AddJwtBearer(authenticationScheme:"JWTBearerAuthentication", config => {
-
-                });
+            services.AddAuthentication(x => 
+            {
+                x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            }).AddJwtBearer(authenticationScheme:"JWTBearerAuthentication", config => 
+            {
+                config.RequireHttpsMetadata = true;
+                config.SaveToken = true;
+                config.TokenValidationParameters = new TokenValidationParameters 
+                { 
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
+                    ValidateIssuer = false,
+                    ValidateAudience = false
+                    
+                };
+            });
 
             services.ConfigureApplicationCookie(o => {
                 o.Cookie.Name = "MyWebApiCookie";
