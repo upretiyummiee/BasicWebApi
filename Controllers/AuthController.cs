@@ -1,7 +1,13 @@
 ﻿using BasicWebApi.Data.IdentityData;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
+using System;
+using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
+using System.Security.Claims;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace BasicWebApi.Controllers
@@ -14,15 +20,19 @@ namespace BasicWebApi.Controllers
 
         private readonly UserManager<IdentityUserInherit> _userManager;
         private readonly SignInManager<IdentityUserInherit> _signInManager;
+        private readonly IConfiguration _configuration;
 
         public AuthController(
             UserManager<IdentityUserInherit> userManager,
-            SignInManager<IdentityUserInherit> signInManager) {
+            SignInManager<IdentityUserInherit> signInManager,
+            IConfiguration configuration) {
             _userManager = userManager;
             _signInManager = signInManager;
+            _configuration = configuration;
         }
 
         [HttpPost("SignIn")]
+        [RequireHttps()]
         public async Task<IActionResult> SignIn(SignInUser sign)
         {
             if (sign is null)
@@ -31,15 +41,28 @@ namespace BasicWebApi.Controllers
             }
             else
             {
-                var userData = new IdentityUserInherit
-                {
-                    UserName = sign.UserName
-                };
-
                 var result = await _signInManager.PasswordSignInAsync(sign.UserName, sign.Password, true, false);
                 if (result.Succeeded)
                 {
-                    return Ok();
+                    ////JWT Token Generation
+                    var claims = new[]
+                    {
+                        new Claim("Username", sign.UserName)
+                    };
+
+                    var signingcredentials = new SigningCredentials(new SymmetricSecurityKey(
+                        Encoding.UTF8.GetBytes(_configuration.GetSection("key").ToString())),
+                        SecurityAlgorithms.HmacSha512);
+
+                    var tokendescriptor = new SecurityTokenDescriptor {
+                        Subject = new ClaimsIdentity(claims),
+                        Expires = DateTime.UtcNow.AddMinutes(4),
+                        SigningCredentials = signingcredentials
+                    };
+
+                    var tokenhandler = new JwtSecurityTokenHandler();
+                    var token = tokenhandler.CreateToken(tokendescriptor);
+                    return Ok(tokenhandler.WriteToken(token));
                 }
                 else
                 {
@@ -85,15 +108,16 @@ namespace BasicWebApi.Controllers
                 }
                 else
                 {
-                    return BadRequest("Object validation error occured");
+                    return ValidationProblem(ModelState);
                 }
             }
         }
 
-        [HttpGet("signout")]
+        [HttpPost("signout")]
         public async Task<IActionResult> Out()
         {
             var req = User.Identity.IsAuthenticated;
+            var type = User.Identity.AuthenticationType;
             if (!req) {
                 return Unauthorized();
             }

@@ -20,7 +20,10 @@ namespace BasicWebApi
             Host.CreateDefaultBuilder(args)
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
-                    webBuilder.UseStartup<Startup>();
+                    webBuilder.UseStartup<Startup>()
+                    .UseKestrel( config => {
+                        config.AddServerHeader = false;
+                    });
                 });
     }
 }

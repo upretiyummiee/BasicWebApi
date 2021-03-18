@@ -1,0 +1,2 @@
+﻿Hello, this is an attachment example from asp.net core basic web api.
+Wow, isn't it?

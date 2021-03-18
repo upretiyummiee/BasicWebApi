@@ -1,7 +1,7 @@
-using AutoMapper;
 using BasicWebApi.Data;
 using BasicWebApi.Data.IdentityData;
-using Microsoft.AspNetCore.Authentication.Cookies;
+using BasicWebApi.Data.Repository.Implementation;
+using BasicWebApi.Data.Repository.Interface;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -13,10 +13,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using Newtonsoft.Json;
 using System;
-using System.Net;
-using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -34,9 +33,6 @@ namespace BasicWebApi
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            string key = "401b09eab3c013d4ca54922bb802bec8fd5318192b" +
-                "0a75f201d8b3727429090fb337591abd3e44453b954555b7a0812e1" +
-                "081c39b740293f765eae731f5a65ed1";
 
             services.AddControllers();
 
@@ -47,7 +43,7 @@ namespace BasicWebApi
                         .WithMethods("GET", "DELETE", "PUT", "POST", "OPTIONS")
                         .AllowCredentials()
                         .SetIsOriginAllowed((host) => true)
-                        //.AllowAnyHeader()
+                        .AllowAnyHeader()
                         .WithHeaders("Authorization"));
             });
 
@@ -78,21 +74,48 @@ namespace BasicWebApi
                 o.SignIn.RequireConfirmedPhoneNumber = false;
             }).AddEntityFrameworkStores<AppDbContext>().AddDefaultTokenProviders();
 
-            services.AddAuthentication(x => 
+            services.AddAuthentication( x =>
             {
                 x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
                 x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-            }).AddJwtBearer(authenticationScheme:"JWTBearerAuthentication", config => 
+            }).AddJwtBearer(authenticationScheme:JwtBearerDefaults.AuthenticationScheme, config =>
             {
+                config.IncludeErrorDetails = true;
+
                 config.RequireHttpsMetadata = true;
                 config.SaveToken = true;
-                config.TokenValidationParameters = new TokenValidationParameters 
-                { 
+                config.RequireHttpsMetadata = true;
+
+                config.Events = new JwtBearerEvents 
+                {
+                    OnAuthenticationFailed = context => 
+                    {
+                        if (context.Exception.GetType() == typeof(SecurityTokenExpiredException))
+                        {
+                            context.Response.Headers.Add("Token-Expired", "true");
+                            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        }
+
+                        return Task.FromResult<object>(null);
+                    },
+
+                    OnForbidden = context => 
+                    {
+                        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                        return Task.FromResult<object>(null);
+                    },
+
+                };
+
+                config.TokenValidationParameters = new TokenValidationParameters
+                {
                     ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
+                    IssuerSigningKey = new SymmetricSecurityKey(
+                        Encoding.UTF8.GetBytes(Configuration.GetSection("key").ToString())),
                     ValidateIssuer = false,
-                    ValidateAudience = false
-                    
+                    ValidateAudience = false,
+                    ClockSkew = TimeSpan.Zero,
+                    RequireExpirationTime = true
                 };
             });
 
@@ -103,8 +126,7 @@ namespace BasicWebApi
 
                 o.Events.OnRedirectToLogin = context => {
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    //var header = HttpResponseHeader.WwwAuthenticate;
-                    context.Response.Headers.Append("www-authenticate", "29");
+                    context.Response.Headers.Append("WWW-Authenticate", "/api/auth/signin");
                     return Task.FromResult<object>(null);
                 };
 
@@ -119,6 +141,22 @@ namespace BasicWebApi
                 };
             });
 
+
+            services.AddSwaggerGen(x => 
+            {
+                x.SwaggerDoc("v1", new OpenApiInfo
+                { 
+                    Title = "MyBasicWebApi",
+                    Version = "v1",
+                    Description = "Doc for my basic web api",
+                    Contact = new OpenApiContact 
+                    {
+                        Name = "Prabesh Upreti",
+                        Email = "upretiyummiee@hotmail.com"
+                    }
+                });
+            });
+            services.AddSingleton<IMailSender, OutlookMailSender>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -134,7 +172,19 @@ namespace BasicWebApi
 
             app.UseRouting();
 
+            app.Use(async (context, next) =>
+            {
+                context.Response.Headers.Add("X-Developed-By", "Wizard");
+                await next.Invoke();
+            });
+
             app.UseCors("CorsPolicy");
+
+            app.UseSwagger();
+            app.UseSwaggerUI(config => {
+                config.SwaggerEndpoint("/swagger/v1/swagger.json", "MyApi");
+                config.RoutePrefix = "api";
+            });
 
             app.UseAuthentication();
             app.UseAuthorization();        
